@@ -43,13 +43,39 @@ QUALIFIER="${QUALIFIER:-$(date -u +%Y%m%d%H%M)}"
 
 die() { echo "ERROR: $*" >&2; exit 2; }
 
+# Under MSYS/Git Bash a Windows-style ARCHI_HOME breaks `find`/`[ -d ]`; POSIX it here and convert
+# back at the javac boundary. Same contract as tools/run-tests.sh. `-m` yields drive-letter paths
+# with FORWARD slashes; `-w` would emit backslashes, which javac treats as escapes in an @argfile.
+if command -v cygpath >/dev/null; then
+  ARCHI_HOME="$(cygpath -u "$ARCHI_HOME")"
+fi
+
+native_paths() {
+  if command -v cygpath >/dev/null; then
+    cygpath -m -f - < "$1" > "$1.native" && mv "$1.native" "$1"
+  fi
+}
+
+native_cp() {
+  if command -v cygpath >/dev/null; then cygpath -p -m "$1"; else printf '%s' "$1"; fi
+}
+
+native_path() {
+  if command -v cygpath >/dev/null; then cygpath -m "$1"; else printf '%s' "$1"; fi
+}
+
 ARCHI_PLUGINS="$ARCHI_HOME/plugins"
 MANIFEST="$PROD/META-INF/MANIFEST.MF"
 [ -d "$ARCHI_PLUGINS" ] || die "ARCHI_HOME/plugins not found: $ARCHI_PLUGINS (set ARCHI_HOME)"
 [ -d "$PROD/src" ]      || die "production source not found: $PROD/src"
 [ -f "$MANIFEST" ]      || die "MANIFEST.MF not found: $MANIFEST"
 command -v javac >/dev/null || die "javac not on PATH (need a JDK 21+)"
-command -v zip   >/dev/null || die "zip not on PATH"
+
+if   command -v zip     >/dev/null; then ZIPPER=zip
+elif command -v python3 >/dev/null; then ZIPPER=python3
+elif command -v python  >/dev/null; then ZIPPER=python
+else die "need 'zip' or a python interpreter to build the .archiplugin archive"
+fi
 
 # ---- read bundle identity from MANIFEST.MF (continuation-line safe) ----
 manifest_value() {
@@ -80,7 +106,9 @@ COMPILE_CP="$LIBS$ARCHIJARS"
 rm -rf "$OUT_CLASSES"; mkdir -p "$OUT_CLASSES"
 echo "-- compiling ($(find "$PROD/src" -name '*.java' | wc -l | tr -d ' ') files) ..."
 find "$PROD/src" -name '*.java' > "$BUILD_DIR/srcs.txt"
-javac --release 21 -encoding UTF-8 -nowarn -cp "$COMPILE_CP" -d "$OUT_CLASSES" "@$BUILD_DIR/srcs.txt" \
+native_paths "$BUILD_DIR/srcs.txt"
+javac --release 21 -encoding UTF-8 -nowarn -cp "$(native_cp "$COMPILE_CP")" \
+  -d "$(native_path "$OUT_CLASSES")" "@$BUILD_DIR/srcs.txt" \
   || die "production compile failed (see javac output above)"
 
 # ---- assemble the bundle folder per bin.includes (META-INF, plugin.*, classes at '.', resources, img, lib) ----
@@ -105,7 +133,22 @@ printf 'Magic file to signify this is an Archi plug-in bundle.' > "$STAGE/archi-
 mkdir -p "$DIST_DIR"
 ARCHIPLUGIN="$DIST_DIR/${BUNDLE_ID}.archiplugin"
 rm -f "$ARCHIPLUGIN"
-( cd "$STAGE" && zip -qr "$ARCHIPLUGIN" archi-plugin "$BUNDLE_ID" ) || die "failed to zip .archiplugin"
+if [ "$ZIPPER" = zip ]; then
+  ( cd "$STAGE" && zip -qr "$ARCHIPLUGIN" archi-plugin "$BUNDLE_ID" ) || die "failed to zip .archiplugin"
+else
+  "$ZIPPER" - "$(native_path "$STAGE")" "$(native_path "$ARCHIPLUGIN")" "$BUNDLE_ID" <<'WRITE_ARCHIPLUGIN' \
+    || die "failed to zip .archiplugin"
+import os, sys, zipfile
+
+stage, out, bundle_id = sys.argv[1], sys.argv[2], sys.argv[3]
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    z.write(os.path.join(stage, "archi-plugin"), "archi-plugin")
+    for root, _dirs, files in os.walk(os.path.join(stage, bundle_id)):
+        for name in files:
+            path = os.path.join(root, name)
+            z.write(path, os.path.relpath(path, stage).replace(os.sep, "/"))
+WRITE_ARCHIPLUGIN
+fi
 
 echo "-- wrote $ARCHIPLUGIN ($(du -h "$ARCHIPLUGIN" | cut -f1))"
 echo "RESULT: OK"

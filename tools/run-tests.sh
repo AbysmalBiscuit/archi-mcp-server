@@ -41,6 +41,15 @@ M2_REPO="${M2_REPO:-$HOME/.m2/repository}"
 BUILD_DIR="${BUILD_DIR:-$REPO/build/test-harness}"
 RESULTS_DIR="${RESULTS_DIR:-$REPO/build/test-results}"
 
+# Under MSYS/Git Bash these are typically handed in Windows form (C:/Program Files/Archi). Fold
+# them to POSIX so `find`/`ls`/`[ -d ]` work and the assembled classpath is uniform; native_cp
+# converts back at the javac/java boundary.
+if command -v cygpath >/dev/null; then
+  ARCHI_HOME="$(cygpath -u "$ARCHI_HOME")"
+  ECLIPSE_HOME="$(cygpath -u "$ECLIPSE_HOME")"
+  M2_REPO="$(cygpath -u "$M2_REPO")"
+fi
+
 EXCLUDED_MANIFEST="$SCRIPT_DIR/osgi-excluded-tests.txt"
 KNOWN_FAILING="$SCRIPT_DIR/known-failing-tests.txt"
 RUNNER_CLASS="net.vheerden.archi.mcp.harness.HeadlessTestRunner"
@@ -97,6 +106,25 @@ OUT_TESTS="$BUILD_DIR/tests"
 COMPILE_CP="$JUNIT:$HAM:$LIBS:$MOCK:$ARCHIJARS"
 JAVAC_FLAGS=(--release 21 -encoding UTF-8 -nowarn)
 
+# javac/java are native Windows binaries under MSYS/Git Bash: they cannot resolve the POSIX
+# paths `find` emits into an @argfile, and MSYS leaves a `:`-joined classpath untouched once it
+# contains a drive letter. Both helpers below are no-ops wherever cygpath is absent (Linux CI,
+# macOS). `-m` yields drive-letter paths with FORWARD slashes; `-w` would emit backslashes, which
+# javac treats as escapes inside an @argfile.
+native_paths() {
+  if command -v cygpath >/dev/null; then
+    cygpath -m -f - < "$1" > "$1.native" && mv "$1.native" "$1"
+  fi
+}
+
+native_cp() {
+  if command -v cygpath >/dev/null; then cygpath -p -m "$1"; else printf '%s' "$1"; fi
+}
+
+native_path() {
+  if command -v cygpath >/dev/null; then cygpath -m "$1"; else printf '%s' "$1"; fi
+}
+
 echo "== M0-1 headless build + test harness =="
 echo "   repo:        $REPO"
 echo "   ARCHI_HOME:  $ARCHI_HOME"
@@ -107,7 +135,8 @@ echo "   results dir: $RESULTS_DIR"
 echo "-- compiling production source ($(find "$PROD/src" -name '*.java' | wc -l | tr -d ' ') files) ..."
 rm -rf "$OUT_PROD"; mkdir -p "$OUT_PROD"
 find "$PROD/src" -name '*.java' > "$BUILD_DIR/prod-srcs.txt"
-javac "${JAVAC_FLAGS[@]}" -cp "$COMPILE_CP" -d "$OUT_PROD" "@$BUILD_DIR/prod-srcs.txt" \
+native_paths "$BUILD_DIR/prod-srcs.txt"
+javac "${JAVAC_FLAGS[@]}" -cp "$(native_cp "$COMPILE_CP")" -d "$OUT_PROD" "@$BUILD_DIR/prod-srcs.txt" \
   || die "production compile failed (see javac output above)"
 # Mirror Eclipse's bin.includes so classpath resource loads resolve (resources/, img/).
 [ -d "$PROD/resources" ] && cp -R "$PROD/resources" "$OUT_PROD/"
@@ -123,6 +152,16 @@ PROD_JAR="$BUILD_DIR/prod.jar"
 # them. File entries (the resources themselves) are unaffected.
 if command -v zip >/dev/null; then
   zip -d "$PROD_JAR" '*/' >/dev/null 2>&1 || true
+elif PY="$(command -v python3 || command -v python)" && [ -n "$PY" ]; then
+  "$PY" - "$(native_path "$PROD_JAR")" <<'STRIP_DIR_ENTRIES' || die "failed to strip jar directory entries"
+import sys, zipfile
+src = sys.argv[1]
+with zipfile.ZipFile(src) as z:
+    entries = [(i, z.read(i.filename)) for i in z.infolist() if not i.filename.endswith('/')]
+with zipfile.ZipFile(src, 'w', zipfile.ZIP_DEFLATED) as z:
+    for info, data in entries:
+        z.writestr(info, data)
+STRIP_DIR_ENTRIES
 else
   # Not silent: without zip the jar keeps directory entries, so getResourceAsStream on a directory
   # path returns a 0-byte stream instead of null — a class like ResourceHandlerTest will then go
@@ -135,7 +174,8 @@ fi
 echo "-- compiling test source ($(find "$TESTS/src" -name '*.java' | wc -l | tr -d ' ') files) ..."
 rm -rf "$OUT_TESTS"; mkdir -p "$OUT_TESTS"
 find "$TESTS/src" -name '*.java' > "$BUILD_DIR/test-srcs.txt"
-javac "${JAVAC_FLAGS[@]}" -cp "$OUT_PROD:$COMPILE_CP" -d "$OUT_TESTS" "@$BUILD_DIR/test-srcs.txt" \
+native_paths "$BUILD_DIR/test-srcs.txt"
+javac "${JAVAC_FLAGS[@]}" -cp "$(native_cp "$OUT_PROD:$COMPILE_CP")" -d "$OUT_TESTS" "@$BUILD_DIR/test-srcs.txt" \
   || die "test compile failed (see javac output above)"
 [ -d "$TESTS/testdata" ] && cp -R "$TESTS/testdata" "$OUT_TESTS/" 2>/dev/null || true
 
@@ -177,11 +217,19 @@ fi
 mkdir -p "$RESULTS_DIR"
 echo "-- running tests (JUnit XML -> $RESULTS_DIR) ..."
 LOG="$BUILD_DIR/run.log"
+# The classpath plus 200+ class names exceeds the Windows 32 KiB command-line limit, so the
+# classpath, runner and class list go through a JDK @argfile instead of the argv.
+JAVA_ARGS="$BUILD_DIR/java-args.txt"
+{
+  printf -- '-cp\n"%s"\n' "$(native_cp "$RUN_CP")"
+  printf '%s\n' "$RUNNER_CLASS"
+  printf '%s\n' "${CLASSES[@]}"
+} > "$JAVA_ARGS"
 # ${arr[@]+"${arr[@]}"} = expand to nothing when empty (bash 3.2 + `set -u` would otherwise abort).
 java ${JVM_FLAGS[@]+"${JVM_FLAGS[@]}"} \
   -Dharness.xmlDir="$RESULTS_DIR" \
   -Dharness.knownFailingFile="$KNOWN_FAILING" \
-  -cp "$RUN_CP" "$RUNNER_CLASS" "${CLASSES[@]}" > "$LOG" 2>&1
+  "@$JAVA_ARGS" > "$LOG" 2>&1
 rc=$?
 
 # Preserve the run-pins.sh SLF4J stdout-hygiene; show the per-class results + summary block.

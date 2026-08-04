@@ -75,7 +75,7 @@ public class ErrorResponseTest {
     @Test
     public void shouldHaveAllExpectedErrorCodes() {
         ErrorCode[] codes = ErrorCode.values();
-        assertEquals(36, codes.length);
+        assertEquals(40, codes.length);
         assertNotNull(ErrorCode.valueOf("ELEMENT_NOT_FOUND"));
         assertNotNull(ErrorCode.valueOf("MODEL_NOT_LOADED"));
         assertNotNull(ErrorCode.valueOf("INVALID_PARAMETER"));
@@ -115,5 +115,11 @@ public class ErrorResponseTest {
         assertNotNull(ErrorCode.valueOf("FOLDER_LAYER_MISMATCH"));
         // image error code
         assertNotNull(ErrorCode.valueOf("IMAGE_NOT_FOUND"));
+        // save-model error codes
+        assertNotNull(ErrorCode.valueOf("MODEL_NEVER_SAVED"));
+        assertNotNull(ErrorCode.valueOf("MODEL_CHECK_FAILED"));
+        assertNotNull(ErrorCode.valueOf("SAVE_GATED_BY_APPROVAL"));
+        // view navigation error code
+        assertNotNull(ErrorCode.valueOf("VIEW_EDITOR_UNAVAILABLE"));
     }
 }

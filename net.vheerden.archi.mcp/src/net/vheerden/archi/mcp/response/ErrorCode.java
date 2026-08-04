@@ -45,5 +45,13 @@ public enum ErrorCode {
     INVALID_MOVE_TARGET,
     FOLDER_LAYER_MISMATCH,
     /** Supplied imagePath does not resolve to bytes in the model archive. */
-    IMAGE_NOT_FOUND
+    IMAGE_NOT_FOUND,
+    /** The open model has no file on disk, so there is nothing to save it to. */
+    MODEL_NEVER_SAVED,
+    /** Archi's own model checker rejects the model; host Archi would refuse to write it. */
+    MODEL_CHECK_FAILED,
+    /** Approval mode is on, so the human — not the agent — decides when the model reaches disk. */
+    SAVE_GATED_BY_APPROVAL,
+    /** No Archi workbench is running, so there are no diagram editors to open or navigate. */
+    VIEW_EDITOR_UNAVAILABLE
 }

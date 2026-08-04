@@ -64,5 +64,7 @@ public final class HandlerRegistrar {
         new FolderMutationHandler(accessor, formatter, registry, sm).registerTools();
         new SessionHandler(sm, formatter, registry).registerTools();
         new CommandStackHandler(accessor, formatter, registry).registerTools();
+        new PersistenceHandler(accessor, formatter, registry, sm).registerTools();
+        new ViewNavigationHandler(accessor, formatter, registry, sm).registerTools();
     }
 }

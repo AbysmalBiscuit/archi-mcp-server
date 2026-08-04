@@ -24,9 +24,11 @@ import net.vheerden.archi.mcp.handlers.ElementUpdateHandler;
 import net.vheerden.archi.mcp.handlers.FolderHandler;
 import net.vheerden.archi.mcp.handlers.ModelQueryHandler;
 import net.vheerden.archi.mcp.handlers.MutationHandler;
+import net.vheerden.archi.mcp.handlers.PersistenceHandler;
 import net.vheerden.archi.mcp.handlers.SearchHandler;
 import net.vheerden.archi.mcp.handlers.TraversalHandler;
 import net.vheerden.archi.mcp.handlers.ViewHandler;
+import net.vheerden.archi.mcp.handlers.ViewNavigationHandler;
 import net.vheerden.archi.mcp.handlers.ViewPlacementHandler;
 import net.vheerden.archi.mcp.model.ArchiModelAccessor;
 import net.vheerden.archi.mcp.model.BaseTestAccessor;
@@ -80,6 +82,8 @@ public class ErrorConsistencyTest {
         new DiscoveryHandler(noModelAccessor, formatter, registryNoModel, null).registerTools();
         new ApprovalHandler(noModelAccessor, formatter, registryNoModel, null).registerTools();
         new ViewPlacementHandler(noModelAccessor, formatter, registryNoModel, null).registerTools();
+        new PersistenceHandler(noModelAccessor, formatter, registryNoModel, null).registerTools();
+        new ViewNavigationHandler(noModelAccessor, formatter, registryNoModel, null).registerTools();
 
         // Setup 2: Model loaded (for not-found errors — returns empty for unknown IDs)
         registryWithModel = new CommandRegistry();
@@ -141,7 +145,10 @@ public class ErrorConsistencyTest {
                 Map.entry("add-connection-to-view", Map.of("viewId", "v-1", "relationshipId", "r-1", "sourceViewObjectId", "vo-1", "targetViewObjectId", "vo-2")),
                 Map.entry("update-view-object", Map.of("viewObjectId", "vo-1", "x", 100)),
                 Map.entry("update-view-connection", Map.of("viewConnectionId", "vc-1", "bendpoints", List.of())),
-                Map.entry("remove-from-view", Map.of("viewId", "v-1", "viewObjectId", "vo-1")));
+                Map.entry("remove-from-view", Map.of("viewId", "v-1", "viewObjectId", "vo-1")),
+                Map.entry("save-model", Collections.emptyMap()),
+                Map.entry("open-view", Map.of("viewId", "v-1")),
+                Map.entry("navigate-view", Map.of("viewId", "v-1")));
 
         for (Map.Entry<String, Map<String, Object>> entry : toolArgs.entrySet()) {
             String toolName = entry.getKey();

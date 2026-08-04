@@ -615,6 +615,10 @@ Mechanics:
 | `INVALID_PARAMETER` | Parameter validation failure |
 | `MODEL_NOT_LOADED` | No ArchiMate model open |
 | `IMAGE_NOT_FOUND` | Supplied `imagePath` does not resolve to bytes in the model archive (`add-image-to-view`, `create-specialization` / `update-specialization` icon path) |
+| `SAVE_GATED_BY_APPROVAL` | `save-model` called while approval mode is on — a gated agent's changes are proposals, so it may not commit them to disk |
+| `MODEL_NEVER_SAVED` | `save-model` called on a model with no file on disk; the human must perform one File > Save As first |
+| `MODEL_CHECK_FAILED` | Archi's `ModelChecker` reported integrity problems, which would make the save pop a modal error dialog |
+| `VIEW_EDITOR_UNAVAILABLE` | `open-view` / `navigate-view` called with no running workbench (headless Archi) |
 
 ### Validation Sync Principle
 

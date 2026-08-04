@@ -6,7 +6,7 @@ An Eclipse PDE plugin for [Archi](https://www.archimatetool.com/) that exposes A
 
 Archi MCP Server embeds an HTTP server inside Archi that speaks MCP. Once running, any MCP-compatible LLM client (Claude, Cline, LM Studio, etc.) can connect and interact with the currently open ArchiMate model — asking questions, searching elements, traversing relationships, composing view diagrams, and even creating or modifying model content.
 
-The server provides **69 MCP tools** across querying, searching, creating, layout, routing, assessment, batch operations, images, specializations, and more — plus **14 MCP resources** with ArchiMate reference material, workflow guides, and a viewpoint recipe library for LLMs.
+The server provides **72 MCP tools** across querying, searching, creating, layout, routing, assessment, batch operations, images, specializations, persistence, editor navigation, and more — plus **14 MCP resources** with ArchiMate reference material, workflow guides, and a viewpoint recipe library for LLMs.
 
 **Example conversation:**
 
@@ -208,7 +208,7 @@ untrusted input.
 
 ## Available Tools
 
-The server exposes **69 MCP tools** organised into functional categories.
+The server exposes **72 MCP tools** organised into functional categories.
 
 ### Query & Model Inspection (6 tools)
 
@@ -320,6 +320,15 @@ A view object can also **anchor** to a target container via `update-view-object`
 |---|---|
 | `auto-connect-view` | Create visual connections for all existing model relationships between elements already placed on a view. Optional `showLabel: false` to suppress labels, and optional `lineColor`, `fontColor`, `lineWidth` to batch-style every connection it creates (combine with `relationshipTypes` filter to style by type) |
 
+### Editor Navigation (2 tools)
+
+Drive the human's Archi window so the agent and the human are looking at the same thing. Neither tool changes the model, so neither is gated by approval mode. Both require a running workbench — headless Archi returns `VIEW_EDITOR_UNAVAILABLE`.
+
+| Tool | Description |
+|---|---|
+| `open-view` | Open a view in a diagram editor. Optional `activate` (default `true`) brings the tab to the front; `false` opens it in the background. Reports `alreadyOpen` so the agent can tell an open tab from a fresh one |
+| `navigate-view` | Move around inside a view: select objects (`selectObjectIds`, accepting either diagram-object ids or the ids of the ArchiMate concepts they reference), set the zoom (`zoom` as a factor, or `zoomMode` of `fit` / `fit-width` / `fit-height` / `actual` — never both), and scroll (`scrollX` / `scrollY`). Opens the view first if it is not already open, and returns the settled zoom and scroll position |
+
 ### Folder Management (5 tools)
 
 | Tool | Description |
@@ -367,6 +376,12 @@ A view object can also **anchor** to a target container via `update-view-object`
 |---|---|
 | `undo` | Undo the most recent mutation operation(s) with optional step count. **Scoped to the agent's own changes:** stops at — and refuses to cross — any human edit on the stack, so the agent can never silently revert hand-drawn work (to undo a human change it must submit a new proposal). The human's native Ctrl+Z is unscoped and still undoes anything |
 | `redo` | Redo previously undone operation(s). Scoped to the agent's own changes, symmetric to `undo` |
+
+### Persistence (1 tool)
+
+| Tool | Description |
+|---|---|
+| `save-model` | Write the open model to its existing `.archimate` file so the agent does not have to ask the human to press Ctrl+S. Refuses while approval mode is on (`SAVE_GATED_BY_APPROVAL`) — a gated agent's changes are proposals, not facts on disk. A model that has never been saved has no file to write to, so it returns `MODEL_NEVER_SAVED` and asks the human for one File > Save As; the alternative would pop a modal dialog and hang the request. A model with no unsaved changes is a no-op reporting `saved: false`, and a model that fails Archi's integrity check returns `MODEL_CHECK_FAILED` with the problems listed |
 
 ### Approval Workflow (1 tool)
 

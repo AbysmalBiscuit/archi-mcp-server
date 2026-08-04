@@ -152,6 +152,11 @@ public class ToolDiscoveryIntegrationTest {
         // Undo/redo tools
         assertTrue("Missing undo", toolNames.contains("undo"));
         assertTrue("Missing redo", toolNames.contains("redo"));
+        // Persistence tool
+        assertTrue("Missing save-model", toolNames.contains("save-model"));
+        // Editor navigation tools
+        assertTrue("Missing open-view", toolNames.contains("open-view"));
+        assertTrue("Missing navigate-view", toolNames.contains("navigate-view"));
         // Group positioning tool
         assertTrue("Missing arrange-groups", toolNames.contains("arrange-groups"));
         // Element order optimization tool

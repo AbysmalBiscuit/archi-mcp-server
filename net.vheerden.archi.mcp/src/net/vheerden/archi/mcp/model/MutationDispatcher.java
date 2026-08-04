@@ -26,6 +26,7 @@ import net.vheerden.archi.mcp.response.dto.BatchStatusDto;
 import net.vheerden.archi.mcp.response.dto.BatchSummaryDto;
 import net.vheerden.archi.mcp.response.dto.PendingProposalView;
 import net.vheerden.archi.mcp.response.dto.ProposalDto;
+import net.vheerden.archi.mcp.response.dto.SaveModelResultDto;
 
 /**
  * Dispatches mutation commands to the ArchiMate model via CommandStack.
@@ -69,6 +70,12 @@ public class MutationDispatcher {
      */
     private final ProposalStalenessGuard stalenessGuard;
 
+    /** Writes the active model to disk — see {@link #saveModel()}. */
+    private final ModelPersistence modelPersistence;
+
+    /** Drives Archi's diagram editors — see {@link #getViewNavigator()}. */
+    private final ViewNavigator viewNavigator;
+
     /** The shared "stored request → fresh command + preconditions" rebuilder used by the approve path. */
     private final ProposalBuilder proposalBuilder = new ProposalBuilder();
 
@@ -94,6 +101,14 @@ public class MutationDispatcher {
     public MutationDispatcher(Supplier<IArchimateModel> modelSupplier) {
         this.modelSupplier = Objects.requireNonNull(modelSupplier, "modelSupplier must not be null");
         this.stalenessGuard = new ProposalStalenessGuard(modelSupplier);
+        UiThreadDispatcher uiThread = new UiThreadDispatcher() {
+            @Override
+            public <T> T onUiThread(java.util.concurrent.Callable<T> work) throws MutationException {
+                return dispatchOnUiThread(work);
+            }
+        };
+        this.modelPersistence = new ModelPersistence(modelSupplier, uiThread);
+        this.viewNavigator = new ViewNavigator(modelSupplier, uiThread);
     }
 
     // ---- Staleness-guard lifecycle (driven by the accessor's model events) ----
@@ -142,6 +157,39 @@ public class MutationDispatcher {
      */
     void setOnImmediateDispatchCallback(Runnable callback) {
         this.onImmediateDispatchCallback = callback;
+    }
+
+    // ---- Persistence ----
+
+    /**
+     * Writes the active model to its file on disk.
+     *
+     * <p>Saving is not a {@code CommandStack} operation and leaves the model untouched; it lives
+     * here because this class already owns the active-model supplier and the UI-thread hop that
+     * host Archi's save requires.</p>
+     *
+     * @return what the save did, including whether a write was needed at all
+     * @throws NoModelLoadedException if no model is open
+     * @throws ModelAccessException   if the model has no file, fails Archi's checks, or the
+     *                                write itself fails
+     */
+    public SaveModelResultDto saveModel() {
+        return modelPersistence.save();
+    }
+
+    // ---- Editor navigation ----
+
+    /**
+     * Returns the collaborator that opens views and moves the camera within them.
+     *
+     * <p>Like {@link #saveModel()} this is not a {@code CommandStack} operation and changes no
+     * model state; it lives behind this class because handlers reach the active model and the
+     * UI-thread hop through here.</p>
+     *
+     * @return the view navigator, never null
+     */
+    public ViewNavigator getViewNavigator() {
+        return viewNavigator;
     }
 
     // ---- Approval-queue change notification ----
